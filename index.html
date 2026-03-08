@@ -675,6 +675,10 @@
             <button class="btn btn-secondary" onclick="exportToCSV()">
                 📊 导出数据
             </button>
+            <button class="btn btn-secondary" onclick="document.getElementById('importFile').click()">
+                📥 导入数据
+            </button>
+            <input type="file" id="importFile" accept=".csv" style="display: none;" onchange="importFromCSV(event)">
         </div>
     </div>
 
@@ -1668,6 +1672,99 @@
             document.body.removeChild(link);
 
             showToast('数据已导出为 CSV 文件', 'success');
+        }
+
+        // ========== 数据导入 ==========
+        function importFromCSV(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const content = e.target.result;
+                    const lines = content.split('\n');
+
+                    // 跳过表头和BOM
+                    const dataLines = lines.slice(1).filter(line => line.trim());
+
+                    if (dataLines.length === 0) {
+                        showToast('CSV 文件为空', 'error');
+                        return;
+                    }
+
+                    // 解析CSV并按目标分组
+                    const goalsMap = new Map();
+
+                    dataLines.forEach(line => {
+                        // 简单的CSV解析（处理带引号的字段）
+                        const matches = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
+                        if (!matches || matches.length < 6) return;
+
+                        const [goalName, date, hours, note, targetHours, deadline] = matches.map(field =>
+                            field.replace(/^"|"$/g, '').trim()
+                        );
+
+                        if (!goalsMap.has(goalName)) {
+                            goalsMap.set(goalName, {
+                                id: Date.now() + Math.random(), // 生成唯一ID
+                                name: goalName,
+                                targetHours: parseFloat(targetHours) || 0,
+                                deadline: deadline || '',
+                                records: []
+                            });
+                        }
+
+                        const goal = goalsMap.get(goalName);
+                        goal.records.push({
+                            id: Date.now() + Math.random(),
+                            date: date,
+                            hours: parseFloat(hours) || 0,
+                            note: note
+                        });
+                    });
+
+                    // 询问用户是合并还是替换
+                    const action = confirm(
+                        `找到 ${goalsMap.size} 个目标，共 ${dataLines.length} 条记录。\n\n` +
+                        `点击"确定"替换现有数据\n` +
+                        `点击"取消"合并到现有数据`
+                    );
+
+                    if (action) {
+                        // 替换模式
+                        goals = Array.from(goalsMap.values());
+                        showToast('数据已替换！', 'success');
+                    } else {
+                        // 合并模式
+                        const importedGoals = Array.from(goalsMap.values());
+                        importedGoals.forEach(importedGoal => {
+                            const existing = goals.find(g => g.name === importedGoal.name);
+                            if (existing) {
+                                // 合并记录到现有目标
+                                existing.records.push(...importedGoal.records);
+                                existing.records.sort((a, b) => new Date(b.date) - new Date(a.date));
+                            } else {
+                                // 添加新目标
+                                goals.push(importedGoal);
+                            }
+                        });
+                        showToast('数据已合并！', 'success');
+                    }
+
+                    saveData();
+                    renderGoals();
+
+                } catch (error) {
+                    console.error('导入错误:', error);
+                    showToast('导入失败，请检查文件格式', 'error');
+                }
+            };
+
+            reader.readAsText(file, 'UTF-8');
+
+            // 重置文件输入，允许重复导入同一文件
+            event.target.value = '';
         }
 
         // ========== 主题切换 ==========
