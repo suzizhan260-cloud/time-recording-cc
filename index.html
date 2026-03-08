@@ -562,6 +562,9 @@
             background: var(--bg-color);
             border-radius: 12px;
             border: 2px solid var(--border-color);
+            touch-action: none;
+            -webkit-user-select: none;
+            user-select: none;
         }
 
         .time-picker {
@@ -614,6 +617,7 @@
             height: 100%;
             overflow: hidden;
             position: relative;
+            z-index: 3;
         }
 
         .time-column-wrapper {
@@ -624,6 +628,7 @@
             user-select: none;
             -webkit-user-select: none;
             touch-action: pan-y;
+            z-index: 3;
         }
 
         .time-column-wrapper:active {
@@ -640,6 +645,7 @@
             font-weight: 500;
             color: var(--text-light);
             transition: all 0.2s ease;
+            pointer-events: auto;
         }
 
         .time-item.selected {
@@ -1060,10 +1066,13 @@
             }
 
             init() {
+                console.log('TimeScrollPicker init:', this.type, this.container);
                 // 生成 HTML
                 this.container.innerHTML = this.data.map((item, index) =>
                     `<div class="time-item" data-index="${index}">${item}</div>`
                 ).join('');
+
+                console.log('生成了', this.data.length, '个时间项');
 
                 // 初始化位置
                 this.currentIndex = this.type === 'hour' ? 9 : 0; // 默认 09:00
@@ -1071,6 +1080,7 @@
 
                 // 绑定事件
                 this.bindEvents();
+                console.log('事件绑定完成');
             }
 
             bindEvents() {
@@ -1090,6 +1100,7 @@
                 };
 
                 const onStart = (e) => {
+                    console.log('onStart triggered', e.type);
                     isDragging = true;
                     this.container.style.transition = 'none';
 
@@ -1099,6 +1110,8 @@
                     lastTime = Date.now();
                     startTranslate = getTranslateY();
                     velocity = 0;
+
+                    e.preventDefault();
                 };
 
                 const onMove = (e) => {
@@ -1144,15 +1157,16 @@
                     }
                 };
 
-                // 鼠标事件
-                this.container.addEventListener('mousedown', onStart);
-                document.addEventListener('mousemove', onMove);
-                document.addEventListener('mouseup', onEnd);
+                // 鼠标事件 - 绑定在容器上
+                this.container.addEventListener('mousedown', onStart, false);
+                document.addEventListener('mousemove', onMove, false);
+                document.addEventListener('mouseup', onEnd, false);
 
-                // 触摸事件
+                // 触摸事件 - 绑定在容器和 document 上
                 this.container.addEventListener('touchstart', onStart, { passive: false });
-                this.container.addEventListener('touchmove', onMove, { passive: false });
-                this.container.addEventListener('touchend', onEnd);
+                document.addEventListener('touchmove', onMove, { passive: false });
+                document.addEventListener('touchend', onEnd, { passive: false });
+                document.addEventListener('touchcancel', onEnd, { passive: false });
             }
 
             calculateIndexFromTranslate(translate) {
@@ -1218,11 +1232,18 @@
             const startPicker = document.getElementById('startTimePicker');
             const endPicker = document.getElementById('endTimePicker');
 
-            if (!startPicker || !endPicker) return;
+            console.log('初始化时间选择器', startPicker, endPicker);
+
+            if (!startPicker || !endPicker) {
+                console.error('找不到时间选择器元素');
+                return;
+            }
 
             // 开始时间选择器
             const startHourWrapper = startPicker.querySelector('[data-type="hour"]');
             const startMinuteWrapper = startPicker.querySelector('[data-type="minute"]');
+
+            console.log('开始时间包装器', startHourWrapper, startMinuteWrapper);
 
             startHourPicker = new TimeScrollPicker(startHourWrapper, 'hour', () => {
                 updateTimeInput('startTime');
@@ -1238,6 +1259,8 @@
             const endHourWrapper = endPicker.querySelector('[data-type="hour"]');
             const endMinuteWrapper = endPicker.querySelector('[data-type="minute"]');
 
+            console.log('结束时间包装器', endHourWrapper, endMinuteWrapper);
+
             endHourPicker = new TimeScrollPicker(endHourWrapper, 'hour', () => {
                 updateTimeInput('endTime');
                 calculateTimeDuration();
@@ -1248,6 +1271,8 @@
                 calculateTimeDuration();
             });
 
+            console.log('所有选择器创建完成');
+
             // 初始化时间值
             updateTimeInput('startTime');
             updateTimeInput('endTime');
@@ -1257,9 +1282,12 @@
             let hour, minute;
 
             if (inputId === 'startTime') {
+                // 检查picker是否已初始化，避免在构造函数执行期间调用
+                if (!startHourPicker || !startMinutePicker) return;
                 hour = startHourPicker.getValue();
                 minute = startMinutePicker.getValue();
             } else {
+                if (!endHourPicker || !endMinutePicker) return;
                 hour = endHourPicker.getValue();
                 minute = endMinutePicker.getValue();
             }
@@ -1268,8 +1296,11 @@
         }
 
         function setupTimeCalculation() {
-            // 初始化时间选择器
-            initializeTimePickers();
+            // 延迟初始化，确保DOM已经渲染
+            setTimeout(() => {
+                console.log('开始初始化时间选择器');
+                initializeTimePickers();
+            }, 100);
         }
 
         function calculateTimeDuration() {
